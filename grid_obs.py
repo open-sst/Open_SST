@@ -1,5 +1,6 @@
 import sqlite3
 import numpy as np
+import numpy.ma as ma
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
@@ -26,8 +27,60 @@ class grid:
 
         self.data, self.nobs = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
         self.data[:,:] = None
+        self.sd, self.nships = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
+        self.sd[:,:] = None
 
-    
+    def plot(self):
+
+        masked = ma.masked_values(self.data, -999)
+
+        fig = plt.figure()
+        ax = fig.add_axes([0.05,0.05,0.9,0.9])
+        m = Basemap(projection='kav7',lon_0=0,resolution=None)
+        #m.drawcoastlines()
+        m.drawmapboundary(fill_color='1')
+        im1 = m.pcolormesh(self.longitudes,self.latitudes,masked,shading='flat',cmap=plt.cm.RdBu,latlon=True)
+        m.drawparallels(np.arange(-90.,99.,30.))
+        m.drawmeridians(np.arange(-180.,180.,60.))
+        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
+        ax.set_title('SST analysis for ')
+        plt.show()
+
+    def plot_sd(self):
+
+        masked = ma.masked_values(self.sd, -999)
+
+        fig = plt.figure()
+        ax = fig.add_axes([0.05,0.05,0.9,0.9])
+        m = Basemap(projection='kav7',lon_0=0,resolution=None)
+        #m.drawcoastlines()
+        m.drawmapboundary(fill_color='1')
+        im1 = m.pcolormesh(self.longitudes,self.latitudes,masked,shading='flat',cmap=plt.cm.RdBu,latlon=True)
+        m.drawparallels(np.arange(-90.,99.,30.))
+        m.drawmeridians(np.arange(-180.,180.,60.))
+        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
+        ax.set_title('Stdev SST')
+        plt.show()
+
+    def plot_nobs(self):
+
+        masked = ma.masked_values(self.nobs, 0.0)
+
+        fig = plt.figure()
+        ax = fig.add_axes([0.05,0.05,0.9,0.9])
+        m = Basemap(projection='kav7',lon_0=0,resolution=None)
+        #m.drawcoastlines()
+        m.drawmapboundary(fill_color='1')
+        im1 = m.pcolormesh(self.longitudes,self.latitudes,masked,shading='flat',cmap=plt.cm.RdBu,latlon=True)
+        m.drawparallels(np.arange(-90.,99.,30.))
+        m.drawmeridians(np.arange(-180.,180.,60.))
+        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
+        ax.set_title('Nobs')
+        plt.show()
+
+    def total_nobs(self):
+        return sum(sum(self.nobs))
+        
     def area_average(self):
 
         weights = np.cos(self.latitudes*np.pi/180.)
@@ -37,12 +90,11 @@ class grid:
 
         for xx in range(0,self.nx):
             for yy in range(0,self.ny):
-             #   print xx, yy, self.nobs[xx,yy], self.data[xx,yy]
+
                 if self.nobs[xx,yy] != 0.0 :
-              #      print weights[xx,yy]
+
                     sum_weighted_data += (self.data[xx,yy] * weights[xx,yy])
                     sum_weights += weights[xx,yy]
-             #       print sum_weighted_data, sum_weights
 
         if sum_weights != 0:
             area_average = sum_weighted_data/sum_weights
@@ -77,15 +129,21 @@ class grid:
            # print anom, self.xbox(longitudes[i]), self.ybox(latitudes[i])
             if self.nobs[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] == 0.0:
                 self.data[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] = anom
+                self.sd[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] = anom*anom
                 self.nobs[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] =  1.0
             else:
                 self.data[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] += anom
+                self.sd[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] += (anom*anom)
                 self.nobs[ self.xbox(longitudes[i]), self.ybox(latitudes[i]) ] +=  1.0
 
         for xx in range(0,self.nx):
             for yy in range(0,self.ny):
                 if self.nobs[xx,yy] != 0.0:
                     self.data[xx,yy] = self.data[xx,yy] / self.nobs[xx,yy]
+                    self.sd[xx,yy] = np.sqrt( (self.sd[xx,yy] / self.nobs[xx,yy] ) - (self.data[xx,yy]*self.data[xx,yy]) )
+                else:
+                    self.data[xx,yy] = -999.
+                    self.sd[xx,yy] = -999.
 
 data = grid(5.0,5.0)
 data.add_obs([0.0,0.0],[0.0,0.0],[20.,20.],[19.,19.])
@@ -137,18 +195,11 @@ for years in range(1850,1852):
         data.add_obs(latitudes,longitudes,ssts,climav)
 
         print data.area_average()
+        print data.total_nobs()
 
-
-#        fig = plt.figure()
-#        ax = fig.add_axes([0.05,0.05,0.9,0.9])
-#        m = Basemap(projection='kav7',lon_0=0,resolution=None)
-#        m.drawmapboundary(fill_color='0.3')
-#        im1 = m.pcolormesh(data.longitudes,data.latitudes,data.data,shading='flat',cmap=plt.cm.jet,latlon=True)
-#        m.drawparallels(np.arange(-90.,99.,30.))
-#        m.drawmeridians(np.arange(-180.,180.,60.))
-#        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
-#        ax.set_title('SST analysis for ')
-#        plt.show()
+data.plot_sd()
+data.plot_nobs()
+data.plot()
 
 connection.close()
 

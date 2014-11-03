@@ -99,7 +99,13 @@ for rows in allids:
         thisid = rows[0]
         print "ID,",thisid
 
-        cursor.execute("SELECT COUNT(*) FROM marinereports WHERE id=:id",{"id": thisid})
+        cursor.execute("SELECT COUNT(*) FROM marinereports \
+                        INNER JOIN qc ON marinereports.uid = qc.uid \
+                        WHERE marinereports.id=:id \
+                        AND qc.bad_time = 0 \
+                        AND qc.sst_no_normal = 0 \
+                        AND qc.sst_climatology_check = 0 \
+                        AND qc.sst_freeze_check = 0",{"id": thisid})
         n_elements = cursor.fetchone()[0]
 
         times        = np.zeros(n_elements)
@@ -110,8 +116,18 @@ for rows in allids:
         ship_speeds  = np.zeros(n_elements)
         uids = []
 
-        cursor.execute('SELECT year, month, day, hour, latitude, longitude, sst, ship_course, ship_speed, uid \
-                        FROM marinereports WHERE id=:id',{"id": thisid})
+        cursor.execute('SELECT marinereports.year, marinereports.month, \
+                        marinereports.day, marinereports.hour, \
+                        marinereports.latitude, marinereports.longitude, \
+                        marinereports.sst, marinereports.ship_course, \
+                        marinereports.ship_speed, marinereports.uid \
+                        FROM marinereports \
+                        INNER JOIN qc ON marinereports.uid = qc.uid \
+                        WHERE marinereports.id=:id \
+                        AND qc.bad_time = 0 \
+                        AND qc.sst_no_normal = 0 \
+                        AND qc.sst_climatology_check = 0 \
+                        AND qc.sst_freeze_check = 0',{"id": thisid})
 
         for i in range(n_elements):
             row = cursor.fetchone()

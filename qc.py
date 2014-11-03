@@ -258,8 +258,34 @@ def track_check(times,latitudes,longitudes,reported_course,reported_speed):
             failure = 1
 
 #flag if distance between reported and predicted position
-
-
+#start loop at two because we need a calculated speed for the previous ob
+    for i in range(2,n):
+        if reported_course[i-1] != None and not(math.isnan(reported_course[i-1])) and \
+           reported_speed[i-1] != None and not(math.isnan(reported_speed[i-1])):
+            if ship_course_lookup[int(reported_course[i-1])] != None:
+                #this is the reported speed at the previous ob
+                low  =  reported_speed_low_bounds[int(reported_speed[i-1])]*knots_conversion
+                high =  reported_speed_high_bounds[int(reported_speed[i-1])]*knots_conversion
+                avspeed = (high+low)/2.
+                #this is the reported course at the previous ob
+                course = ship_course_lookup[int(reported_course[i-1])]
+                #assume a 1 degree movement total
+                latchange = np.cos(course)
+                lonchange = np.sin(course)
+                #calculate distance from this 1 degree move
+                dist = sphere_distance(latitudes[i-1],longitudes[i-1],latitudes[i-1]+latchange,longitudes[i-1]+lonchange)
+                #the time between observations is
+                timchange = times[i]-times[i-1]
+                #predicted speed times actual time between observations gives predicted distance covered
+                dist2 = avspeed * timchange
+                #scale lat and lon changes by ratio of predicted distance covered and distance for simple 1deg shift
+                latchange = latchange * dist2 / dist
+                lonchange = lonchange * dist2 / dist
+                #calculate difference between predicted and reported position
+                dist = sphere_distance(latitudes[i],longitudes[i],latitudes[i-1]+latchange,longitudes[i-1]+lonchange)
+                #if this distance is greater than the time between obs multiplied by the calculated speed at the last ob then fail
+                if dist > timchange*speeds[i-1,1]:
+                    flags[i,5] = 1
 
 #flag if direction of travel differs by more than 60 degrees from the direction reported at previous ob
     for i in range(1,n):
@@ -282,7 +308,7 @@ def track_check(times,latitudes,longitudes,reported_course,reported_speed):
     failure = np.zeros(n)
     for i in range(1,n-1):
 #failure is exceed soft speed limit AND too far from interpolated position AND two or more others
-        if flags[i,0] == 1 and flags[i,3] == 1 and flags[i,1]+flags[i,2]+flags[i,4] >=2 :
+        if flags[i,0] == 1 and flags[i,3] == 1 and flags[i,1]+flags[i,2]+flags[i,4]+flags[i,5] >=2 :
             failure[i] = 1
             
     return failure
