@@ -29,10 +29,11 @@ class grid:
         self.data[:,:] = None
         self.sd, self.nships = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
         self.sd[:,:] = None
+        self.unc, self.unc2 = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
+        self.unc[:,:] = None
+        self.unc2[:,:] = None
 
-    def plot(self):
-
-        masked = ma.masked_values(self.data, -999)
+    def plot_masked(self, masked):
 
         fig = plt.figure()
         ax = fig.add_axes([0.05,0.05,0.9,0.9])
@@ -46,40 +47,54 @@ class grid:
         ax.set_title('SST analysis for ')
         plt.show()
 
+
+    def plot(self):
+        masked = ma.masked_values(self.data, -999)
+        self.plot_masked(masked)
+
     def plot_sd(self):
-
         masked = ma.masked_values(self.sd, -999)
-
-        fig = plt.figure()
-        ax = fig.add_axes([0.05,0.05,0.9,0.9])
-        m = Basemap(projection='kav7',lon_0=0,resolution=None)
-        #m.drawcoastlines()
-        m.drawmapboundary(fill_color='1')
-        im1 = m.pcolormesh(self.longitudes,self.latitudes,masked,shading='flat',cmap=plt.cm.RdBu,latlon=True)
-        m.drawparallels(np.arange(-90.,99.,30.))
-        m.drawmeridians(np.arange(-180.,180.,60.))
-        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
-        ax.set_title('Stdev SST')
-        plt.show()
-
+        self.plot_masked(masked)
+ 
     def plot_nobs(self):
-
         masked = ma.masked_values(self.nobs, 0.0)
+        self.plot_masked(masked)
 
-        fig = plt.figure()
-        ax = fig.add_axes([0.05,0.05,0.9,0.9])
-        m = Basemap(projection='kav7',lon_0=0,resolution=None)
-        #m.drawcoastlines()
-        m.drawmapboundary(fill_color='1')
-        im1 = m.pcolormesh(self.longitudes,self.latitudes,masked,shading='flat',cmap=plt.cm.RdBu,latlon=True)
-        m.drawparallels(np.arange(-90.,99.,30.))
-        m.drawmeridians(np.arange(-180.,180.,60.))
-        cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
-        ax.set_title('Nobs')
-        plt.show()
+    def plot_nships(self):
+        masked = ma.masked_values(self.nships, 0.0)
+        self.plot_masked(masked)
+
+    def plot_uncertainty(self):
+        masked = ma.masked_values(self.unc, -999)
+        self.plot_masked(masked)
 
     def total_nobs(self):
         return sum(sum(self.nobs))
+
+
+    def area_average_uncertainty(self):
+
+#assumes grid box uncertainties are uncorrelated
+        weights = np.cos(self.latitudes*np.pi/180.)
+        
+        sum_weighted_data = 0.0
+        sum_weights = 0.0
+
+        for xx in range(0,self.nx):
+            for yy in range(0,self.ny):
+
+                if self.nobs[xx,yy] != 0.0 :
+
+                    sum_weighted_data += (self.unc[xx,yy] * self.unc[xx,yy] * weights[xx,yy] * weights[xx,yy])
+                    sum_weights += weights[xx,yy]
+
+        if sum_weights != 0:
+            area_average = np.sqrt( sum_weighted_data / (sum_weights*sum_weights) )
+        else:
+            area_average = None
+
+        return area_average
+
         
     def area_average(self):
 
@@ -145,6 +160,63 @@ class grid:
                     self.data[xx,yy] = -999.
                     self.sd[xx,yy] = -999.
 
+    def add_obs_by_ship(self, latitudes, longitudes, ssts, normals, ids):
+
+        n = len(latitudes)
+
+        random_unc = 0.8
+        micro_bias_unc = 0.8
+
+        unique_ids = set(ids)
+
+        sig_ni_mi, sig_nisq_bi = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
+
+#loop over all ships and extract indices for that ship
+        for ship in unique_ids:
+            indices = [i for i, x in enumerate(ids) if x == ship]
+
+            ni_mi, ship_mask = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
+
+            for i in indices:
+                anom = ssts[i] - normals[i]
+           # print anom, self.xbox(longitudes[i]), self.ybox(latitudes[i])
+                xx = self.xbox(longitudes[i])
+                yy = self.ybox(latitudes[i])
+
+                if ship_mask[xx,yy] == 0:
+                    ship_mask[xx,yy] = 1.0
+                
+                if self.nobs[xx, yy] == 0.0:
+                    self.data[xx, yy] = anom
+                    self.sd[xx, yy] = anom*anom
+                    self.nobs[xx, yy] =  1.0
+                    ni_mi[xx,yy] = 1.0
+                else:
+                    self.data[xx, yy] += anom
+                    self.sd[xx, yy] += (anom*anom)
+                    self.nobs[xx, yy] +=  1.0
+                    ni_mi[xx,yy] += 1.0 
+
+#at the end of each unique id add up the uncertainty components
+            sig_ni_mi = sig_ni_mi + (ni_mi * random_unc * random_unc)
+            sig_ni_bi = sig_ni_mi + (ni_mi * ni_mi * micro_bias_unc * micro_bias_unc)
+            self.nships = self.nships + ship_mask
+
+
+        #once all ships have been added, do the final calculations
+        for xx in range(0,self.nx):
+            for yy in range(0,self.ny):
+                if self.nobs[xx,yy] != 0.0:
+                    self.data[xx,yy] = self.data[xx,yy] / self.nobs[xx,yy]
+                    self.unc[xx,yy] = np.sqrt( (sig_ni_mi[xx,yy] + sig_ni_bi[xx,yy]) / (self.nobs[xx,yy]*self.nobs[xx,yy]) )
+                    self.sd[xx,yy] = np.sqrt( (self.sd[xx,yy] / self.nobs[xx,yy] ) - (self.data[xx,yy]*self.data[xx,yy]) )
+                else:
+                    self.data[xx,yy] = -999.
+                    self.unc[xx,yy] = -999.
+                    self.sd[xx,yy] = -999.
+
+
+
 data = grid(5.0,5.0)
 data.add_obs([0.0,0.0],[0.0,0.0],[20.,20.],[19.,19.])
 print data.area_average()
@@ -173,10 +245,12 @@ for years in range(1850,1852):
         ssts = []
         climav = []
         anoms = []
+        ids = []
 
         for rows in cursor.execute('SELECT marinereports.uid, \
                     marinereports.latitude, marinereports.longitude, marinereports.sst, \
-                    ob_extras.climatological_average \
+                    ob_extras.climatological_average, \
+                    marinereports.id \
                     FROM marinereports \
                     INNER JOIN ob_extras ON marinereports.uid = ob_extras.uid \
                     INNER JOIN qc ON marinereports.uid = qc.uid \
@@ -189,17 +263,27 @@ for years in range(1850,1852):
             longitudes.append(rows[2])
             ssts.append(rows[3])
             climav.append(rows[4])
+            ids.append(str(rows[5]))
             anoms.append(rows[3]-rows[4])
 
-        data  = grid(5.0,5.0)
-        data.add_obs(latitudes,longitudes,ssts,climav)
+        print "ob by ob", years, months
+        data1  = grid(5.0,5.0)
+        data1.add_obs(latitudes,longitudes,ssts,climav)
+        print "{0:.3f}".format(data1.area_average())
+        print data1.total_nobs()
 
-        print data.area_average()
-        print data.total_nobs()
+        print "ship by ship", years, months
+        data2  = grid(5.0,5.0)
+        data2.add_obs_by_ship(latitudes,longitudes,ssts,climav,ids)
+        print "{0:.3f}".format(data2.area_average())
+        print "{0:.3f}".format(data2.area_average_uncertainty())
+        print data2.total_nobs()
+        data2.plot_uncertainty()
 
-data.plot_sd()
-data.plot_nobs()
-data.plot()
+data2.plot_sd()
+data2.plot_nobs()
+data2.plot_nships()
+data2.plot()
 
 connection.close()
 
