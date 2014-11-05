@@ -3,6 +3,7 @@ import imp
 import numpy as np
 import math
 from datetime import date, time, datetime
+import calendar
 from netCDF4 import Dataset
 
 foo = imp.load_source('IMMA.py', '..\IMMA\Python\IMMA.py')
@@ -26,29 +27,35 @@ def which_pentad(inmonth,inday):
 
 def get_sst(lat,lon,month,day,sst):
 
-    assert lat >= -90.0 and lat <=90.0 and lon >= -180.0 and lon <= 360.0
-    assert month >= 1 and month <=12
-
-    if lon >= 180.0:
-        lon = -180.0 + (lon - 180.0)
-
     month_lengths = [31,29,31,30,31,30,31,31,30,31,30,31]
-    assert lat >= -90.0 and lat <=90.0 and lon >= -180.0 and lon <= 180.0
 
-    assert day >=1 and day <= month_lengths[month-1]
-    
+    if  lat >= -90.0 and lat <=90.0 and \
+       lon >= -180.0 and lon <= 360.0 and \
+       month >= 1 and month <=12 and \
+       day >=1 and day <= month_lengths[month-1]:
+        
+        if lon >= 180.0:
+            lon = -180.0 + (lon - 180.0)
+
     #read sst from grid
-    pentad = which_pentad(month,day)
-    xindex = int(lon + 180.0)
-    if xindex >= 360:
-        xindex = 0
-    yindex = int(90 - lat)
-    if yindex >= 180:
-        yindex = 179
-    if yindex < 0:
-        yindex = 0
+        pentad = which_pentad(month,day)
+        xindex = int(lon + 180.0)
+        if xindex >= 360:
+            xindex = 0
+        yindex = int(90 - lat)
+        if yindex >= 180:
+            yindex = 179
+        if yindex < 0:
+            yindex = 0
 
-    return sst[pentad-1,yindex,xindex]
+        result = sst[pentad-1,yindex,xindex]
+
+    else:
+
+        result = -99
+
+
+    return result
 
 climatology = Dataset('Data/HadSST2_pentad_climatology.nc')
 sst = climatology.variables['sst'][:]
@@ -77,7 +84,7 @@ cursor.execute('CREATE TABLE ob_extras (uid text PRIMARY KEY, random_unc real, \
     micro_bias real, bias real, bias_unc real, climatological_average real)')
 
 
-for year in range(1850,1852):
+for year in range(1850,1855):
     for month in range(1,13):
 
         print year,month

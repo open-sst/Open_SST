@@ -33,7 +33,7 @@ class grid:
         self.unc[:,:] = None
         self.unc2[:,:] = None
 
-    def plot_masked(self, masked):
+    def plot_masked(self, masked, title):
 
         fig = plt.figure()
         ax = fig.add_axes([0.05,0.05,0.9,0.9])
@@ -44,29 +44,29 @@ class grid:
         m.drawparallels(np.arange(-90.,99.,30.))
         m.drawmeridians(np.arange(-180.,180.,60.))
         cb = m.colorbar(im1,"bottom", size="5%", pad="2%")
-        ax.set_title('SST analysis for ')
+        ax.set_title('SST analysis for '+title)
         plt.show()
 
 
     def plot(self):
         masked = ma.masked_values(self.data, -999)
-        self.plot_masked(masked)
+        self.plot_masked(masked, '')
 
     def plot_sd(self):
         masked = ma.masked_values(self.sd, -999)
-        self.plot_masked(masked)
+        self.plot_masked(masked, 'StDev')
  
     def plot_nobs(self):
         masked = ma.masked_values(self.nobs, 0.0)
-        self.plot_masked(masked)
+        self.plot_masked(masked, 'Nobs')
 
     def plot_nships(self):
         masked = ma.masked_values(self.nships, 0.0)
-        self.plot_masked(masked)
+        self.plot_masked(masked, 'Nships')
 
     def plot_uncertainty(self):
         masked = ma.masked_values(self.unc, -999)
-        self.plot_masked(masked)
+        self.plot_masked(masked, 'Uncertainty')
 
     def total_nobs(self):
         return sum(sum(self.nobs))
@@ -235,7 +235,11 @@ print "Passed No Normal",cursor.fetchone()[0]
 cursor.execute("SELECT COUNT(*) FROM qc WHERE fewsome_check = 0")
 print "Passed Fewsome check",cursor.fetchone()[0]
 
-for years in range(1850,1852):
+
+ts = []
+tsunc = []
+
+for years in range(1850,1855):
     for months in range(1,13):
 #        years = 1850
 #        months = 1
@@ -278,12 +282,22 @@ for years in range(1850,1852):
         print "{0:.3f}".format(data2.area_average())
         print "{0:.3f}".format(data2.area_average_uncertainty())
         print data2.total_nobs()
-        data2.plot_uncertainty()
+#        data2.plot_uncertainty()
 
+        ts.append(data2.area_average())
+        tsunc.append(2*data2.area_average_uncertainty())
+       
 data2.plot_sd()
 data2.plot_nobs()
 data2.plot_nships()
 data2.plot()
+
+ax = range(0,len(ts))
+
+plt.figure()
+plt.errorbar(ax,ts,yerr=tsunc)
+plt.ylabel('Anomaly')
+plt.show()
 
 connection.close()
 

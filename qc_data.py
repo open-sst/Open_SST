@@ -29,7 +29,7 @@ cursor = connection.cursor()
 cursor2 = connection.cursor()
 
 
-for years in range(1850,1852):
+for years in range(1850,1855):
     for months in range(1,13):
 #        for rows in cursor.execute('SELECT * FROM marinereports WHERE year=? AND month=?',[years,months]):
 
