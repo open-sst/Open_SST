@@ -81,7 +81,8 @@ cursor.execute('CREATE TABLE qc (uid text PRIMARY KEY, bad_time int, bad_place i
     sst_no_normal int, sst_climatology_check int, fewsome_check int)')
 
 cursor.execute('CREATE TABLE ob_extras (uid text PRIMARY KEY, random_unc real, \
-    micro_bias real, bias real, bias_unc real, climatological_average real)')
+    micro_bias real, bias real, bias_unc real, climatological_average real, \
+    newid text)')
 
 
 for year in range(1850,1855):
@@ -121,14 +122,14 @@ for year in range(1850,1855):
 
 #set some default values for the ob extra table.
             if x.data['PT'] <= 5:
-                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?)'
-                               ,[uid, 0.8, 0.8, None, None, clim])
+                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?,?)'
+                               ,[uid, 0.8, 0.8, None, None, clim, x.data['ID']])
             if x.data['PT'] == 7:
-                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?)'
-                               ,[uid, 0.5, 0.5,  0.0,  0.0, clim])
+                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?,?)'
+                               ,[uid, 0.5, 0.5,  0.0,  0.0, clim, x.data['ID']])
             if x.data['PT'] == 6:
-                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?)'
-                               ,[uid, 0.5, 0.5,  0.0,  0.0, clim])
+                cursor.execute('INSERT INTO ob_extras VALUES (?,?,?,?,?,?,?)'
+                               ,[uid, 0.5, 0.5,  0.0,  0.0, clim, x.data['ID']])
                 
             test=test+1
            

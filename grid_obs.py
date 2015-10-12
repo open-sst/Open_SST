@@ -4,7 +4,7 @@ import numpy.ma as ma
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
-
+import random
 
 class grid:
 
@@ -173,13 +173,14 @@ class grid:
 
 #loop over all ships and extract indices for that ship
         for ship in unique_ids:
+            
             indices = [i for i, x in enumerate(ids) if x == ship]
 
             ni_mi, ship_mask = np.meshgrid(np.zeros(self.ny),np.zeros(self.nx))
 
             for i in indices:
                 anom = ssts[i] - normals[i]
-           # print anom, self.xbox(longitudes[i]), self.ybox(latitudes[i])
+
                 xx = self.xbox(longitudes[i])
                 yy = self.ybox(latitudes[i])
 
@@ -239,7 +240,7 @@ print "Passed Fewsome check",cursor.fetchone()[0]
 ts = []
 tsunc = []
 
-for years in range(1850,1855):
+for years in range(1850,1851):
     for months in range(1,13):
 #        years = 1850
 #        months = 1
@@ -269,6 +270,12 @@ for years in range(1850,1855):
             climav.append(rows[4])
             ids.append(str(rows[5]))
             anoms.append(rows[3]-rows[4])
+
+#randomly assign ship names to one of n groups    
+        id_group_assign = {}
+        unique_ids = set(ids)
+        for thisid in unique_ids:
+            id_group_assign[thisid] = random.randint(0,1)
 
         print "ob by ob", years, months
         data1  = grid(5.0,5.0)

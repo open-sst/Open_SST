@@ -32,6 +32,15 @@ class imma:
         if self.sst != None and (self.sst < -99.9 or self.sst > 99.9):
             self.valid_imma = False
 
+        if self.dck != None and (self.dck < 0 or self.dck > 999):
+            self.valid_imma = False
+        if self.sid != None and (self.sid < 0 or self.sid > 999):
+            self.valid_imma = False
+
+#not sure what's right here ICOADS 2.5 docs say max is 15 but is defined to 21
+        if self.pt != None and (self.pt < 0 or self.pt > 21):
+            self.valid_imma = False
+        
 
     def set_yr(self, instr):
         if instr == "    ":
@@ -93,7 +102,23 @@ class imma:
         else:
             self.c1 = (instr)
 
+    def set_dck(self, instr):
+        if instr == "   ":
+            self.dck = None
+        else:
+            self.dck = int(instr)
 
+    def set_sid(self, instr):
+        if instr == "   ":
+            self.sid = None
+        else:
+            self.sid = int(instr)
+
+    def set_pt(self, instr):
+        if instr == "  ":
+            self.pt = None
+        else:
+            self.pt = int(instr)
     
     def read_record(self, line):
         self.valid_imma = True
@@ -159,9 +184,11 @@ class imma:
         self.bsi = line[112:112+1]
         self.b10 = line[113:115+1]
         self.b1 = line[116:117+1]
-        self.dck = line[118:120+1]
-        self.sid = line[121:123+1]
-        self.pt = line[124:125+1]
+        
+        self.set_dck(line[118:120+1])
+        self.set_sid(line[121:123+1])
+        self.set_pt(line[124:125+1])
+
         self.dups = line[126:127+1]
         self.dupc = line[128:128+1]
         self.tc = line[129:129+1]

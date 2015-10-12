@@ -3,7 +3,7 @@ from random import randint
 from time import sleep
 
 
-for year in range(1852,1890):
+for year in range(1890,1900):
     for month in range(1,13):
 
         print year,month

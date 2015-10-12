@@ -3,14 +3,14 @@ import math
 from datetime import date, time, datetime
 import calendar
 
-def sst_climatology_check(insst,inclimav):
+def sst_climatology_check(insst,inclimav, tolerance = 8.0):
 
     result = 0
 
     if insst == None or inclimav == None:
         result = 1
     else:
-        if abs(insst-inclimav) > 8.0:
+        if abs(insst-inclimav) > tolerance:
             result = 1
 
     return result
@@ -19,7 +19,7 @@ def sst_freeze_check(insst, sst_unc):
 #fail if SST below the freezing point by more than twice the uncertainty
     result = 0
     if (insst != None):
-        if (insst < -1.93-2*sst_unc):
+        if (insst < (-1.93-2*sst_unc)):
             result = 1
     return result
 
@@ -33,6 +33,9 @@ def position_check(inlat, inlon):
         result = 1
     if (inlon <-180 or inlon > 360):
         result = 1
+    if (inlat == 0 and inlon ==0):
+        result = 1
+
     return result
 
 
@@ -40,8 +43,8 @@ def date_check(inyear, inmonth, inday, inhour):
 #return 1 if date is valid. 0 otherwise
     assert inyear != None
     assert inmonth != None
-    assert inday != None
-    
+#    assert inday != None
+
     result = 0
 
     if (inyear > 2024 or inyear < 1850):
@@ -55,16 +58,23 @@ def date_check(inyear, inmonth, inday, inhour):
     else:
         month_lengths = [31,28,31,30,31,30,31,31,30,31,30,31]
         
-    if (inday < 1 or inday > month_lengths[inmonth-1]):
+    if inday == None:
         result = 1
+    else:
+        if (inday < 1 or inday > month_lengths[inmonth-1]):
+            result = 1
 
     if (inhour != None and (inhour >= 24 or inhour < 0)):
         result = 1
 
     return result
 
-
 def sphere_distance(lat1,lon1,lat2,lon2):
+    earths_radius = 6400.0
+    delta = angular_distance(lat1,lon1,lat2,lon2)*earths_radius
+    return delta
+
+def angular_distance(lat1,lon1,lat2,lon2):
 #calculate distance between two points on a sphere
 #input latitudes and longitudes should be in degrees
     assert lat1 != None and not(math.isnan(lat1))
@@ -72,7 +82,6 @@ def sphere_distance(lat1,lon1,lat2,lon2):
     assert lat2 != None and not(math.isnan(lat2))
     assert lon2 != None and not(math.isnan(lon2))
 
-    earths_radius = 6400.0 #earths radius in km
     radians_per_degree = np.pi / 180.
 
 #convert degrees to radians
@@ -89,14 +98,91 @@ def sphere_distance(lat1,lon1,lat2,lon2):
     topbit = bit1 + bit2
     topbit = np.sqrt(topbit)
     bottombit = np.sin(lat1)*np.sin(lat2) + np.cos(lat1)*np.cos(lat2)*np.cos(delta_lambda)
-    delta = earths_radius * np.arctan2(topbit, bottombit)
+    delta = np.arctan2(topbit, bottombit)
     
     return delta
 
+def lat_lon_from_course_and_distance(lat1, lon1, tc, d):
+#calculate a latitude and longitude given a starting point, course and angular distance
+#http://williams.best.vwh.net/avform.htm#LL
+    radians_per_degree = np.pi / 180.
+    lat1 = lat1 * radians_per_degree
+    lon1 = lon1 * radians_per_degree
+
+    lat =np.arcsin(np.sin(lat1)*np.cos(d)+np.cos(lat1)*np.sin(d)*np.cos(tc))
+    dlon=np.arctan2(np.sin(tc)*np.sin(d)*np.cos(lat1),np.cos(d)-np.sin(lat1)*np.sin(lat))
+    lon= math.fmod( lon1-dlon+np.pi, 2.*np.pi ) - np.pi
+
+    lat = lat / radians_per_degree
+    lon = -1 * lon / radians_per_degree
+
+    return (lat,lon)
+
+def course_between_points(lat1,lon1,lat2,lon2):
+#given two points find the initial true course at point1
+    d = angular_distance(lat1,lon1,lat2,lon2)
+    radians_per_degree = np.pi / 180.
+
+    if d != 0:
+    
+        lat1 = lat1 * radians_per_degree
+        lon1 = lon1 * radians_per_degree
+        lat2 = lat2 * radians_per_degree
+        lon2 = lon2 * radians_per_degree
+    
+        if np.cos(lat1) < 0.0000001:
+            if lat1 > 0:
+                tc1 = np.pi
+            else:
+                tc1 = 2.*np.pi
+        else:
+            if np.sin(lon2-lon1) > 0:
+                tc1 = np.arccos((np.sin(lat2)-np.sin(lat1)*np.cos(d))/(np.sin(d)*np.cos(lat1)))
+            else:
+                tc1 = 2.*np.pi-np.arccos((np.sin(lat2)-np.sin(lat1)*np.cos(d))/(np.sin(d)*np.cos(lat1)))
+
+    else:
+        
+        tc1 = 0.0
+        
+    return tc1/radians_per_degree
+
+def intermediate_point(lat1,lon1,lat2,lon2,f):
+#given two lat,lon point find the latitude and longitude that are a fraction f
+#of the great circle distance between them
+#http://williams.best.vwh.net/avform.htm#Intermediate
+
+    assert f <= 1.0
+    
+    d = angular_distance(lat1,lon1,lat2,lon2)
+
+    if d != 0.0:
+#convert degrees to radians
+        radians_per_degree = np.pi / 180.
+        lat1 = lat1 * radians_per_degree
+        lon1 = lon1 * radians_per_degree
+        lat2 = lat2 * radians_per_degree
+        lon2 = lon2 * radians_per_degree
+
+        A = np.sin((1-f)*d)/np.sin(d)
+        B = np.sin(f*d)/np.sin(d)
+        x = A*np.cos(lat1)*np.cos(lon1) +  B*np.cos(lat2)*np.cos(lon2)
+        y = A*np.cos(lat1)*np.sin(lon1) +  B*np.cos(lat2)*np.sin(lon2)
+        z = A*np.sin(lat1)              +  B*np.sin(lat2)
+        lat=np.arctan2(z,np.sqrt(x*x+y*y)) / radians_per_degree
+        lon=np.arctan2(y,x) / radians_per_degree
+    else:
+        lat = lat1
+        lon = lon1
+
+    return (lat,lon)
+
 def split_generic_callsign(times,latitudes,longitudes):
 
+    #knots to metres per second
     knots_conversion     = 0.51444444
-    
+
+    #at least one ship
     result = [1]
     n_ships = 1
 
@@ -112,8 +198,14 @@ def split_generic_callsign(times,latitudes,longitudes):
             speeds =[]
             distances = []
             for j in range(0,n_ships):
-                distances.append(1000.*sphere_distance(latitudes[i],longitudes[i],last_lat[j],last_lon[j]))
-                speeds.append(1000.*sphere_distance(latitudes[i],longitudes[i],last_lat[j],last_lon[j])/(times[i]-last_time[j]))
+                d = 1000.*sphere_distance(latitudes[i],longitudes[i],last_lat[j],last_lon[j])
+                distances.append(d)
+                if times[i]-last_time[j] == 0 and d == 0:
+                    speeds.append(0.0)
+                elif times[i]-last_time[j] == 0 and d != 0:
+                    speeds.append(99.99)
+                else:
+                    speeds.append(d / (times[i]-last_time[j]))
 
             #if all speeds exceed 40 knots then create new ship
             if min(speeds) > 40.0 * knots_conversion:
@@ -123,21 +215,29 @@ def split_generic_callsign(times,latitudes,longitudes):
                 last_lon.append(longitudes[i])
                 result.append(n_ships)
 
-            #else ob is assigned to ship with lowest speed
+            #else check distances from all ships to ob
             else:
-                #winner = speeds.index(min(speeds))
-                winner = distances.index(min(distances))
-                last_time[winner] = times[i]
-                last_lat[winner] = latitudes[i]
-                last_lon[winner] = longitudes[i]
-                result.append(winner+1)
+                if min(distances) < 1000.*5000.:
+                    #if there's a small gap (<5000 km) then append to existing ship
+                    winner = distances.index(min(distances))
+                    last_time[winner] = times[i]
+                    last_lat[winner] = latitudes[i]
+                    last_lon[winner] = longitudes[i]
+                    result.append(winner+1)
+                else:
+                    #for big gaps add a new ship
+                    n_ships = n_ships + 1
+                    last_time.append(times[i])
+                    last_lat.append(latitudes[i])
+                    last_lon.append(longitudes[i])
+                    result.append(n_ships)
                 
     return result
 
 
 def track_check(times,latitudes,longitudes,reported_course,reported_speed):
 
-#this is a set of checks 
+#this is a set of checks to make sure the tracks look sensiblish
 
     knots_conversion     = 0.51444444
     miles_to_km         = 1.609344 
@@ -248,8 +348,9 @@ def track_check(times,latitudes,longitudes,reported_course,reported_speed):
         else:   
             fraction = (times[i]-times[i-1])/(times[i+1]-times[i-1])
 
-        interpolated_latitude = fraction*(latitudes[i+1]-latitudes[i-1]) + latitudes[i-1]
-        interpolated_longitude = fraction*(longitudes[i+1]-longitudes[i-1]) + longitudes[i-1]
+        interpolated_latitude, interpolated_longitude = \
+                               intermediate_point(latitudes[i-1],longitudes[i-1],latitudes[i+1],longitudes[i+1],fraction)
+
         distance_from_interpolated_position = \
                                 sphere_distance(latitudes[i],longitudes[i],\
                                                 interpolated_latitude,interpolated_longitude)
@@ -263,26 +364,26 @@ def track_check(times,latitudes,longitudes,reported_course,reported_speed):
         if reported_course[i-1] != None and not(math.isnan(reported_course[i-1])) and \
            reported_speed[i-1] != None and not(math.isnan(reported_speed[i-1])):
             if ship_course_lookup[int(reported_course[i-1])] != None:
+
                 #this is the reported speed at the previous ob
                 low  =  reported_speed_low_bounds[int(reported_speed[i-1])]*knots_conversion
                 high =  reported_speed_high_bounds[int(reported_speed[i-1])]*knots_conversion
                 avspeed = (high+low)/2.
-                #this is the reported course at the previous ob
-                course = ship_course_lookup[int(reported_course[i-1])]
-                #assume a 1 degree movement total
-                latchange = np.cos(course)
-                lonchange = np.sin(course)
-                #calculate distance from this 1 degree move
-                dist = sphere_distance(latitudes[i-1],longitudes[i-1],latitudes[i-1]+latchange,longitudes[i-1]+lonchange)
                 #the time between observations is
                 timchange = times[i]-times[i-1]
-                #predicted speed times actual time between observations gives predicted distance covered
-                dist2 = avspeed * timchange
-                #scale lat and lon changes by ratio of predicted distance covered and distance for simple 1deg shift
-                latchange = latchange * dist2 / dist
-                lonchange = lonchange * dist2 / dist
+
+                #distance is speed times time
+                distance = avspeed * timchange
+                #angular distance is actual distance divided by earth's radius
+                distance = distance / 6400.
+
+                #this is the reported course at the previous ob
+                course = ship_course_lookup[int(reported_course[i-1])]
+
+                predictedlat, predictedlon = lat_lon_from_course_and_distance(latitudes[i],longitudes[i],course,distance)
+
                 #calculate difference between predicted and reported position
-                dist = sphere_distance(latitudes[i],longitudes[i],latitudes[i-1]+latchange,longitudes[i-1]+lonchange)
+                dist = sphere_distance(latitudes[i],longitudes[i],predictedlat, predictedlon)
                 #if this distance is greater than the time between obs multiplied by the calculated speed at the last ob then fail
                 if dist > timchange*speeds[i-1,1]:
                     flags[i,5] = 1
@@ -293,15 +394,16 @@ def track_check(times,latitudes,longitudes,reported_course,reported_speed):
         lat_change = latitudes[i]-latitudes[i-1]
         lon_change = longitudes[i]-longitudes[i-1]
 
-        angle = angle_from_latlon(lat_change,lon_change)
+        course = course_between_points(latitudes[i-1],longitudes[i-1] \
+                                       ,latitudes[i],longitudes[i])
+        course = course * np.pi/180.
 
-        if angle != None and reported_course[i-1] != None and not(math.isnan(reported_course[i-1])):
-
+        if course != None and reported_course[i-1] != None and not(math.isnan(reported_course[i-1])):
             if ship_course_lookup[int(reported_course[i-1])] != None:
 
-                diff = angle_diff(angle,ship_course_lookup[int(reported_course[i-1])])
+                diff = angle_diff(course,ship_course_lookup[int(reported_course[i-1])])
 
-                if diff > 60.0 * np.pi / 180.:
+                if diff > 60.0 * np.pi/180.:
                     flags[i,4] = 1
                     failure = 1
 
@@ -319,21 +421,4 @@ def angle_diff(angle1,angle2):
     if diff > np.pi:
         diff = 2.0 * np.pi - diff
     return diff
-
-def angle_from_latlon(lat_change,lon_change):
-#work out the bearing from north given a particular latitude and longitude change
-#return None if there's no movement
-    if lat_change > 0 and lon_change >= 0:
-        angle = np.arctan(abs(lon_change)/abs(lat_change))
-    elif lat_change <= 0 and lon_change > 0:
-        angle = np.arctan(abs(lat_change)/abs(lon_change)) + np.pi/2.
-    elif lat_change < 0 and lon_change <= 0:
-        angle = np.arctan(abs(lon_change)/abs(lat_change)) + np.pi
-    elif lat_change >= 0 and lon_change < 0:
-        angle = np.arctan(abs(lat_change)/abs(lon_change)) + 3*np.pi/2.
-    else:
-        angle = None
-
-    return angle
-
 
